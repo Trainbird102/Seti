@@ -5,6 +5,9 @@ import random
 import pandas as pd
 import math
 
+reliability=0.9
+epsilon = 0.01
+
 #поиск минимального значение количества резервных путей
 def find_min_m(reliability, epsilon):
     """
@@ -46,11 +49,12 @@ def find_min_m(reliability, epsilon):
         else:
             prev_product = next_product
             m += 1
-reliability=0.1
-epsilon = 0.01
+
 M = find_min_m(reliability, epsilon)
+
 # Примеры использования поиска минимального количества резервных путей
 print(f"M =", M,f"Количество резервных путей для матрицы с надежностью канала P={reliability}")
+
 #формула для вычисления заполнения матрицы горячего резервирования
 def calculate_probability(reliability, m):
     """
@@ -77,6 +81,7 @@ def calculate_probability(reliability, m):
         product *= (1 - reliability ** k)
 
     return 1 - product
+
 #формула для вычисления заполнения матрицы холодного резервирования
 def calculate_probability_logical(p, m):
     """
@@ -110,11 +115,11 @@ def calculate_probability_logical(p, m):
 
     return -total
 
-
 # Примеры использования:
 print(calculate_probability(reliability, m=1))
 print(calculate_probability(reliability, m=2))
 print(calculate_probability(reliability, m=3))
+
 # Функция для создания связанного графа с учетом надежности канала связи
 def create_reliable_graph(num_nodes=20, base_edges=19, additional_edges=10, reliability=0.9):
     G = nx.Graph()
@@ -136,13 +141,13 @@ def create_reliable_graph(num_nodes=20, base_edges=19, additional_edges=10, reli
 
     return G
 
-
 # Создаем граф с указанной надежностью канала связи
 G = create_reliable_graph(reliability=reliability)
-plt.figure(figsize=(8, 6))
-nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
-plt.title(f'Связанный граф с 20 узлами и надежностью канала связи {reliability}')
-plt.show()
+#отображение графа
+# plt.figure(figsize=(8, 6))
+# nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
+# plt.title(f'Связанный граф с 20 узлами и надежностью канала связи {reliability}')
+# plt.show()
 
 # Матрица смежности
 adj_matrix = nx.adjacency_matrix(G).todense()
@@ -179,9 +184,9 @@ for i in range(n):
             new_matrix_phisical[i, j] = calculate_probability(reliability, dist_matrix[i, j])
         else:
             new_matrix_phisical[i, j] = 0.0
-
 print("\nМатрица резервных путей физическая топология:")
 print(new_matrix_phisical)
+
 # Новая матрица по формуле холодного резервирования
 new_matrix_logical = np.zeros((n, n))
 for i in range(n):
@@ -196,7 +201,6 @@ for i in range(n):
                 new_matrix_logical[i, j] = float('nan')  # В случае ошибки ставим NaN
         else:
             new_matrix_logical[i, j] = 0.0  # Для узлов без пути
-
 print("\nМатрица резервных путей логическая топология:")
 print(new_matrix_logical)
 
@@ -211,41 +215,41 @@ with pd.ExcelWriter(excel_filename) as writer:
 print(f"Матрицы успешно сохранены в файл {excel_filename}")
 
 # Визуализация матриц и графа
-plt.figure(figsize=(8, 7))
-plt.title("Матрица смежности")
-plt.imshow(adj_matrix, cmap='Blues')
-plt.colorbar(label='Связь')
-plt.xticks(np.arange(n), np.arange(n))
-plt.yticks(np.arange(n), np.arange(n))
-plt.xlabel("Узел")
-plt.ylabel("Узел")
-plt.show()
 
-plt.figure(figsize=(8, 7))
-plt.title("Матрица длин кратчайших путей")
-plt.imshow(dist_matrix, cmap='Oranges')
-plt.colorbar(label='Длина пути')
-plt.xticks(np.arange(n), np.arange(n))
-plt.yticks(np.arange(n), np.arange(n))
-plt.xlabel("Узел")
-plt.ylabel("Узел")
-plt.show()
+# plt.figure(figsize=(8, 7))
+# plt.title("Матрица смежности")
+# plt.imshow(adj_matrix, cmap='Blues')
+# plt.colorbar(label='Связь')
+# plt.xticks(np.arange(n), np.arange(n))
+# plt.yticks(np.arange(n), np.arange(n))
+# plt.xlabel("Узел")
+# plt.ylabel("Узел")
+# plt.show()
 
-plt.figure(figsize=(8, 7))
-plt.title("Новая матрица с замененными значениями")
-plt.imshow(new_matrix_phisical, cmap='Greens')
-plt.colorbar(label='Значение')
-plt.xticks(np.arange(n), np.arange(n))
-plt.yticks(np.arange(n), np.arange(n))
-plt.xlabel("Узел")
-plt.ylabel("Узел")
-plt.show()
+# plt.figure(figsize=(8, 7))
+# plt.title("Матрица длин кратчайших путей")
+# plt.imshow(dist_matrix, cmap='Oranges')
+# plt.colorbar(label='Длина пути')
+# plt.xticks(np.arange(n), np.arange(n))
+# plt.yticks(np.arange(n), np.arange(n))
+# plt.xlabel("Узел")
+# plt.ylabel("Узел")
+# plt.show()
 
-plt.figure(figsize=(8, 6))
-nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
-plt.title(f'Связанный граф с 20 узлами и надежностью канала связи {reliability}')
-plt.show()
+# plt.figure(figsize=(8, 7))
+# plt.title("Новая матрица с замененными значениями")
+# plt.imshow(new_matrix_phisical, cmap='Greens')
+# plt.colorbar(label='Значение')
+# plt.xticks(np.arange(n), np.arange(n))
+# plt.yticks(np.arange(n), np.arange(n))
+# plt.xlabel("Узел")
+# plt.ylabel("Узел")
+# plt.show()
 
+# plt.figure(figsize=(8, 6))
+# nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
+# plt.title(f'Связанный граф с 20 узлами и надежностью канала связи {reliability}')
+# plt.show()
 
 def plot_physical_vs_logical(matrix_physical, matrix_logical):
     """
@@ -286,18 +290,12 @@ def plot_physical_vs_logical(matrix_physical, matrix_logical):
     plt.xlim(0, max_val)
     plt.ylim(0, max_val)
     plt.grid(True, linestyle='--', alpha=0.5)
-    plt.legend()
+    #plt.legend()
     plt.show()
+
 plot_physical_vs_logical(new_matrix_phisical, new_matrix_logical)
 
-
-def plot_physical_vs_logical(
-        matrix_physical,
-        matrix_logical,
-        error_percent=5,
-        num_error_points=30,
-        y_offset_percent=3
-):
+def plot_physical_vs_logical(matrix_physical,matrix_logical,error_percent=5,num_error_points=30,y_offset_percent=3):
     """
     Строит точечную диаграмму с заданным количеством точек в пределах погрешности.
 
@@ -375,9 +373,5 @@ def plot_physical_vs_logical(
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.legend()
     plt.show()
-plot_physical_vs_logical(
-    new_matrix_phisical,
-    new_matrix_logical,
-    error_percent=15,
-    num_error_points=30
-)
+
+plot_physical_vs_logical(new_matrix_phisical,new_matrix_logical,error_percent=15,num_error_points=30)
