@@ -5,7 +5,7 @@ import random
 import pandas as pd
 import math
 
-reliability=0.9
+reliability=0.5
 epsilon = 0.01
 
 #поиск минимального значение количества резервных путей
@@ -74,13 +74,14 @@ result = find_min_m_Version2(reliability, epsilon)
 print(f"Минимальное m: {result}")
 
 
-M = find_min_m(reliability, epsilon)
+M = find_min_m_Version2(reliability, epsilon)
 
 # Примеры использования поиска минимального количества резервных путей
 print(f"M =", M,f"Количество резервных путей для матрицы с надежностью канала P={reliability}")
 
 #формула для вычисления заполнения матрицы горячего резервирования
-def calculate_probability(reliability, m):
+reliability1 = 0.8
+def calculate_probability(reliability1, M):
     """
     Вычисляет вероятность P по формуле:
     P = 1 - ∏_{k=1}^{m} (1 - p^k)
@@ -95,19 +96,19 @@ def calculate_probability(reliability, m):
     Исключения:
     ValueError: Если p не в диапазоне (0, 1) или m < 1
     """
-    if not (0 < reliability < 1):
+    if not (0 < reliability1 < 1):
         raise ValueError("p должно быть в диапазоне (0, 1)")
-    if m < 1:
+    if M < 1:
         raise ValueError("m должно быть >= 1")
 
     product = 1.0
-    for k in range(1, m + 1):
-        product *= (1 - reliability ** k)
+    for k in range(1, M + 1):
+        product *= (1 - reliability1 ** k)
 
     return 1 - product
 
 #формула для вычисления заполнения матрицы холодного резервирования
-def calculate_probability_logical(p, m):
+def calculate_probability_logical(reliability1, m):
     """
     Вычисляет значение формулы: -Σ_{k=1}^m [1 / ln(1 - p^k)]
 
@@ -121,17 +122,17 @@ def calculate_probability_logical(p, m):
     Исключения:
     ValueError: Если входные данные некорректны
     """
-    if not (0 < p < 1):
+    if not (0 < reliability1 < 1):
         raise ValueError("p должно быть в диапазоне (0, 1)")
     if m < 1:
         raise ValueError("m должно быть >= 1")
 
     total = 0.0
     for k in range(1, m + 1):
-        p_k = p ** k
+        p_k = reliability1 ** k
         term_inside_log = 1 - p_k
         if term_inside_log <= 0:
-            raise ValueError(f"Аргумент логарифма <= 0 при k={k} (p={p})")
+            raise ValueError(f"Аргумент логарифма <= 0 при k={k} (p={reliability1})")
         log_value = math.log(term_inside_log)
         if log_value == 0:
             raise ValueError(f"Деление на ноль при k={k} (ln(1 - p^{k}) = 0)")
@@ -140,9 +141,10 @@ def calculate_probability_logical(p, m):
     return -total
 
 # Примеры использования:
-print(calculate_probability(reliability, m=1))
-print(calculate_probability(reliability, m=2))
-print(calculate_probability(reliability, m=3))
+print(calculate_probability(reliability, M=1))
+print(calculate_probability(reliability, M=2))
+print(calculate_probability(reliability, M=3))
+print(calculate_probability(reliability, M=4))
 
 # Функция для создания связанного графа с учетом надежности канала связи
 def create_reliable_graph(num_nodes=20, base_edges=19, additional_edges=10, reliability=0.9):
@@ -166,7 +168,7 @@ def create_reliable_graph(num_nodes=20, base_edges=19, additional_edges=10, reli
     return G
 
 # Создаем граф с указанной надежностью канала связи
-G = create_reliable_graph(reliability=reliability)
+G = create_reliable_graph(reliability=reliability1)
 #отображение графа
 # plt.figure(figsize=(8, 6))
 # nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
@@ -184,7 +186,7 @@ n = len(G.nodes)
 dist_matrix = np.zeros((n, n), dtype=int)
 
 # Вычисляем M с помощью функции find_min_m
-M = find_min_m(reliability, epsilon)
+M = find_min_m_Version2(reliability, epsilon)
 print(f"Значение M: {M}")
 
 # Записываем только пути, не превышающие M
@@ -319,7 +321,7 @@ def plot_physical_vs_logical(matrix_physical, matrix_logical):
 
 plot_physical_vs_logical(new_matrix_phisical, new_matrix_logical)
 
-def plot_physical_vs_logical(matrix_physical,matrix_logical,error_percent=5,num_error_points=30,y_offset_percent=3):
+def plot_physical_vs_logical(matrix_physical,matrix_logical,error_percent=5,num_error_points=0,y_offset_percent=3):
     """
     Строит точечную диаграмму с заданным количеством точек в пределах погрешности.
 
