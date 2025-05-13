@@ -50,29 +50,27 @@ def find_min_m(reliability, epsilon):
             prev_product = next_product
             m += 1
 
-def find_min_m_Version2(p, e):
-    if p <= 0 or p >= 1:
+def find_min_m_Version2(reliability, epsilon):
+    if reliability <= 0 or reliability >= 1:
         raise ValueError("p должно быть в интервале (0, 1)")
-    if e <= 0:
+    if epsilon <= 0:
         raise ValueError("e должно быть положительным числом")
 
     m = 1
-    prev_product = 1 - p  # Произведение для m=1: (1 - p^1)
+    prev_product = 1 - reliability  # Произведение для m=1: (1 - p^1)
 
     while True:
-        next_term = 1 - p ** (m + 1)
+        next_term = 1 - reliability ** (m + 1)
         next_product = prev_product * next_term
         difference = prev_product - next_product
 
-        if difference < e:
+        if difference < epsilon:
             return m
 
         prev_product = next_product
         m += 1
-# Пример использования
-p = 0.1
-e = 0.01
-result = find_min_m_Version2(p, e)
+
+result = find_min_m_Version2(reliability, epsilon)
 print(f"Минимальное m: {result}")
 
 
