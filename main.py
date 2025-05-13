@@ -50,6 +50,32 @@ def find_min_m(reliability, epsilon):
             prev_product = next_product
             m += 1
 
+def find_min_m_Version2(p, e):
+    if p <= 0 or p >= 1:
+        raise ValueError("p должно быть в интервале (0, 1)")
+    if e <= 0:
+        raise ValueError("e должно быть положительным числом")
+
+    m = 1
+    prev_product = 1 - p  # Произведение для m=1: (1 - p^1)
+
+    while True:
+        next_term = 1 - p ** (m + 1)
+        next_product = prev_product * next_term
+        difference = prev_product - next_product
+
+        if difference < e:
+            return m
+
+        prev_product = next_product
+        m += 1
+# Пример использования
+p = 0.1
+e = 0.01
+result = find_min_m_Version2(p, e)
+print(f"Минимальное m: {result}")
+
+
 M = find_min_m(reliability, epsilon)
 
 # Примеры использования поиска минимального количества резервных путей
@@ -259,7 +285,7 @@ def plot_physical_vs_logical(matrix_physical, matrix_logical):
     matrix_physical (np.ndarray): Матрица физического резервирования (N x N)
     matrix_logical (np.ndarray): Матрица логического резервирования (N x N)
     """
-    plt.figure(figsize=(5, 3))
+    plt.figure(figsize=(5, 5))
 
     # Собираем данные, исключая диагональ, нули и NaN
     x_data = []
@@ -306,7 +332,7 @@ def plot_physical_vs_logical(matrix_physical,matrix_logical,error_percent=5,num_
     num_error_points (int): Общее количество дополнительных точек
     y_offset_percent (float): Процент смещения по Y
     """
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(12, 12))
 
     # Сбор основных данных
     x_data, y_data = [], []
