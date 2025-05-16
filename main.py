@@ -80,7 +80,7 @@ M = find_min_m_Version2(reliability, epsilon)
 print(f"M =", M,f"Количество резервных путей для матрицы с надежностью канала P={reliability}")
 
 #формула для вычисления заполнения матрицы горячего резервирования
-reliability1 = 0.8
+reliability1 = 0.5
 def calculate_probability(reliability1, M):
     """
     Вычисляет вероятность P по формуле:
@@ -169,11 +169,11 @@ def create_reliable_graph(num_nodes=20, base_edges=19, additional_edges=10, reli
 
 # Создаем граф с указанной надежностью канала связи
 G = create_reliable_graph(reliability=reliability1)
-#отображение графа
-# plt.figure(figsize=(8, 6))
-# nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
-# plt.title(f'Связанный граф с 20 узлами и надежностью канала связи {reliability}')
-# plt.show()
+# отображение графа
+plt.figure(figsize=(8, 6))
+nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
+plt.title(f'Связанный граф с 20 узлами и надежностью канала связи {reliability}')
+plt.show()
 
 # Матрица смежности
 adj_matrix = nx.adjacency_matrix(G).todense()
@@ -285,119 +285,48 @@ def plot_physical_vs_logical(matrix_physical, matrix_logical):
     matrix_physical (np.ndarray): Матрица физического резервирования (N x N)
     matrix_logical (np.ndarray): Матрица логического резервирования (N x N)
     """
-    plt.figure(figsize=(5, 5))
+    plt.figure(figsize=(8, 8))
 
     # Собираем данные, исключая диагональ, нули и NaN
     x_data = []
     y_data = []
+    coordinates = []  # Для хранения координат
 
     for i in range(matrix_physical.shape[0]):
         for j in range(matrix_physical.shape[1]):
-            if i != j:  # Исключаем диагональ
+            if i != j:
                 phys_val = matrix_physical[i, j]
                 log_val = matrix_logical[i, j]
 
-                # Фильтруем нули и NaN
                 if phys_val > 0 and not np.isnan(log_val) and log_val > 0:
                     x_data.append(phys_val)
                     y_data.append(log_val)
-
+                    coordinates.append((phys_val, log_val))
 
     # Построение графика
-    plt.scatter(x_data, y_data, alpha=0.6, color='green', edgecolors='black')
+    scatter = plt.scatter(x_data, y_data, alpha=0.6, color='green', edgecolors='black', label='Точки данных')
+
+    # Добавление координат к точкам
+    for x, y in coordinates:
+        plt.text(x + 0.02,
+                 y,
+                 f'({x:.3f}, {y:.3f})',
+                 fontsize=12,
+                 alpha=0.7,
+                 va='center',
+                 rotation=0)
 
     # Линия y=x для сравнения
-    max_val = max(max(x_data), max(y_data)) * 1.1
-    #plt.plot([0, max_val], [0, max_val], 'r--', label='y = x') окно с подписью на рисунке
+    max_val = max(max(x_data), max(y_data)) * 1.1 if x_data and y_data else 1
+    plt.plot([0, max_val], [0, max_val], 'r--', label='y = x')
 
     plt.title("Сравнение горячего и холодного резервирования")
     plt.xlabel("Физическая топология")
     plt.ylabel("Логическая топология")
-    plt.xlim(0, max_val)
+    plt.xlim(0, 1.25)
     plt.ylim(0, max_val)
     plt.grid(True, linestyle='--', alpha=0.5)
     #plt.legend()
     plt.show()
 
 plot_physical_vs_logical(new_matrix_phisical, new_matrix_logical)
-
-def plot_physical_vs_logical(matrix_physical,matrix_logical,error_percent=5,num_error_points=0,y_offset_percent=3):
-    """
-    Строит точечную диаграмму с заданным количеством точек в пределах погрешности.
-
-    Параметры:
-    matrix_physical (np.ndarray): Матрица физического резервирования
-    matrix_logical (np.ndarray): Матрица логического резервирования
-    error_percent (float): Процент погрешности по оси X
-    num_error_points (int): Общее количество дополнительных точек
-    y_offset_percent (float): Процент смещения по Y
-    """
-    plt.figure(figsize=(12, 12))
-
-    # Сбор основных данных
-    x_data, y_data = [], []
-    for i in range(matrix_physical.shape[0]):
-        for j in range(matrix_physical.shape[1]):
-            if i != j and matrix_physical[i, j] > 0 and not np.isnan(matrix_logical[i, j]):
-                x_data.append(matrix_physical[i, j])
-                y_data.append(matrix_logical[i, j])
-
-    if not x_data:
-        raise ValueError("Нет данных для построения графика")
-
-    # Расчет погрешностей
-    x_errors = [x * error_percent / 100 for x in x_data]
-    y_offsets = [y * y_offset_percent / 100 for y in y_data]
-
-    # Генерация дополнительных точек (30 штук)
-    np.random.seed(42)  # Для воспроизводимости
-    x_scatter, y_scatter = [], []
-    n_main = len(x_data)
-    points_per_main = max(1, num_error_points // n_main)  # Точек на основную
-
-    for x, y, x_err, y_off in zip(x_data, y_data, x_errors, y_offsets):
-        # Случайные смещения в пределах погрешности
-        x_rand = x + x_err * np.random.uniform(-1, 0, points_per_main)
-        y_rand = y + y_off * np.random.uniform(-1, 1, points_per_main)
-        x_scatter.extend(x_rand)
-        y_scatter.extend(y_rand)
-
-    # Обрезаем до 30 точек, если сгенерировано больше
-    x_scatter = x_scatter[:num_error_points]
-    y_scatter = y_scatter[:num_error_points]
-
-    # Основные точки
-    plt.scatter(
-        x_data, y_data,
-        s=80,
-        color='navy',
-        alpha=0.8,
-        label='Основные данные',
-        zorder=3
-    )
-
-    # Точки погрешности
-    plt.scatter(
-        x_scatter, y_scatter,
-        s=40,
-        color='orange',
-        alpha=0.5,
-        marker='x',
-        label=f'Погрешность ({num_error_points} точек)',
-        zorder=2
-    )
-
-    # Линия y=x
-    max_val = max(max(x_data), max(y_data)) * 1.1
-    plt.plot([0, max_val], [0, max_val], 'r--', label='y = x')
-
-    plt.title("Сравнение горячего и холодного резервирования\n", fontsize=14)
-    plt.xlabel("Физическая топология (горячий резерв)", fontsize=12)
-    plt.ylabel("Логическая топология (холодный резерв)", fontsize=12)
-    plt.xlim(0, max_val)
-    plt.ylim(0, max_val)
-    plt.grid(True, linestyle='--', alpha=0.4)
-    plt.legend()
-    plt.show()
-
-plot_physical_vs_logical(new_matrix_phisical,new_matrix_logical,error_percent=15,num_error_points=30)
