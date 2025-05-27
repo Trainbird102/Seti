@@ -1,15 +1,14 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import networkx as nx
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import random
 import pandas as pd
 import math
 
 
-# Основные математические функции из оригинального кода
 def find_min_m(reliability, epsilon):
     if not (0 < reliability < 1):
         raise ValueError("p должно быть в диапазоне (0, 1)")
@@ -67,21 +66,42 @@ def calculate_probability_logical(reliability, m):
     return -total
 
 
-def create_reliable_graph(num_nodes=20, base_edges=19, additional_edges=10, reliability=0.9):
+def create_reliable_graph(num_nodes=15, reliability=0.1, additional_edges=2):
+    """
+    Создает связный граф с заданным количеством узлов и вероятностью соединения.
+
+    Параметры:
+        num_nodes (int): Количество вершин в графе
+        reliability (float): Вероятность добавления ребра [0.0, 1.0]
+        additional_edges (int): Целевое количество дополнительных ребер
+
+    Возвращает:
+        nx.Graph: Связный граф NetworkX
+    """
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
 
-    for i in range(base_edges):
-        if random.random() <= reliability:
-            G.add_edge(i, i + 1)
+    # Гарантированно создаем связный граф (линейная цепочка)
+    for i in range(num_nodes - 1):
+        G.add_edge(i, i + 1)
 
+    # Добавляем дополнительные ребра с учетом вероятности
     edges_added = 0
-    while edges_added < additional_edges:
+    attempts = 0
+    max_attempts = additional_edges * 5  # Защита от бесконечного цикла
+
+    while edges_added < additional_edges and attempts < max_attempts:
+        # Генерируем случайную пару узлов
         u = random.randint(0, num_nodes - 1)
         v = random.randint(0, num_nodes - 1)
-        if u != v and not G.has_edge(u, v) and random.random() <= reliability:
-            G.add_edge(u, v)
-            edges_added += 1
+
+        if u != v and not G.has_edge(u, v):
+            # Проверяем вероятность соединения
+            if random.random() <= reliability:
+                G.add_edge(u, v)
+                edges_added += 1
+            attempts += 1
+
     return G
 
 
@@ -117,14 +137,12 @@ class ReliabilityApp:
 
         self.create_graph_tab()
         self.create_matrix_tab()
-        self.create_plot_tab()
         self.create_compare_tab()
 
     def create_graph_tab(self):
         self.graph_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.graph_frame, text="Топология сети")
         self.canvas_graph = None
-        self.graph_toolbar = None
 
     def create_matrix_tab(self):
         self.matrix_frame = ttk.Frame(self.notebook)
@@ -132,14 +150,14 @@ class ReliabilityApp:
 
         self.matrix_text = scrolledtext.ScrolledText(
             self.matrix_frame,
-            wrap=tk.WORD,
-            font=('Consolas', 9))
+            wrap=tk.NONE,
+            font=('Courier New', 9),
+            tabs=('0.5i', '1i', '2i')
+        )
+        hscroll = ttk.Scrollbar(self.matrix_frame, orient=tk.HORIZONTAL, command=self.matrix_text.xview)
+        self.matrix_text.configure(xscrollcommand=hscroll.set)
+        hscroll.pack(side=tk.BOTTOM, fill=tk.X)
         self.matrix_text.pack(fill=tk.BOTH, expand=True)
-
-    def create_plot_tab(self):
-        self.plot_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.plot_frame, text="Графики")
-        self.canvas_plot = None
 
     def create_compare_tab(self):
         self.compare_frame = ttk.Frame(self.notebook)
@@ -163,7 +181,7 @@ class ReliabilityApp:
             self.update_graph(G)
             matrices = self.calculate_matrices(G, p, M)
             self.update_matrices(*matrices)
-            self.update_plots(*matrices[2:])
+            self.update_comparison_plot(*matrices[2:])
 
             if self.excel_var.get():
                 self.save_to_excel(*matrices)
@@ -214,19 +232,18 @@ class ReliabilityApp:
         self.canvas_graph.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def update_matrices(self, adj, dist, phys, log):
-        # Создаем DataFrame с подписями узлов
         nodes = list(range(len(adj)))
 
-        def format_matrix(matrix, precision=3):
+        def format_matrix(matrix, precision=3, zero_replace="0"):
             df = pd.DataFrame(matrix, index=nodes, columns=nodes)
-            return df.to_string(float_format=lambda x: f"{x:.{precision}f}" if x != 0 else "0",
-                                line_width=200, max_rows=20, max_cols=20)
+            return df.to_string(float_format=lambda x: f"{x:.{precision}f}" if x != 0 else zero_replace,
+                                line_width=300, max_rows=20, max_cols=20)
 
         text = "=" * 50 + " МАТРИЦА СМЕЖНОСТИ " + "=" * 50 + "\n\n"
-        text += format_matrix(adj, 0) + "\n\n"
+        text += format_matrix(adj, 0, " ") + "\n\n"
 
         text += "=" * 50 + " МАТРИЦА КРАТЧАЙШИХ ПУТЕЙ " + "=" * 50 + "\n\n"
-        text += format_matrix(dist, 0) + "\n\n"
+        text += format_matrix(dist, 0, " ") + "\n\n"
 
         text += "=" * 50 + " ФИЗИЧЕСКОЕ РЕЗЕРВИРОВАНИЕ " + "=" * 50 + "\n\n"
         text += format_matrix(phys) + "\n\n"
@@ -236,43 +253,39 @@ class ReliabilityApp:
 
         self.matrix_text.delete(1.0, tk.END)
         self.matrix_text.insert(tk.END, text)
-        self.matrix_text.configure(font=('Courier New', 9))
 
-    def update_plots(self, phys, log):
-        self.update_heatmaps(phys, log)
-        self.update_scatter(phys, log)
-
-    def update_heatmaps(self, phys, log):
-        if self.canvas_plot:
-            self.canvas_plot.get_tk_widget().destroy()
-
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-        im1 = ax1.imshow(phys, cmap='viridis')
-        ax1.set_title('Физическое резервирование')
-        fig.colorbar(im1, ax=ax1)
-
-        im2 = ax2.imshow(log, cmap='plasma')
-        ax2.set_title('Логическое резервирование')
-        fig.colorbar(im2, ax=ax2)
-
-        plt.tight_layout()
-
-        self.canvas_plot = FigureCanvasTkAgg(fig, self.plot_frame)
-        self.canvas_plot.draw()
-        self.canvas_plot.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
-    def update_scatter(self, phys, log):
+    def update_comparison_plot(self, phys, log):
         if self.canvas_compare:
             self.canvas_compare.get_tk_widget().destroy()
 
         fig = plt.figure(figsize=(8, 6))
-        plt.scatter(phys.flatten(), log.flatten(), alpha=0.5, color='green')
-        plt.plot([0, 1], [0, 1], 'r--')
+
+        # Собираем данные для графика
+        x = phys.flatten()
+        y = log.flatten()
+        valid_indices = ~np.isnan(y)
+        x = x[valid_indices]
+        y = y[valid_indices]
+
+        plt.scatter(x, y, alpha=0.5, color='green', label='Точки данных')
+        plt.plot([0, 1], [0, 1], 'r--', label='Линия равенства')
+
+        # Добавляем координаты для 10 случайных точек
+        indices = np.random.choice(len(x), size=min(10, len(x)), replace=False)
+        for i in indices:
+            plt.annotate(f'({x[i]:.2f}, {y[i]:.2f})',
+                         (x[i], y[i]),
+                         textcoords="offset points",
+                         xytext=(5, 5),
+                         ha='left',
+                         fontsize=8,
+                         arrowprops=dict(arrowstyle='->', color='gray'))
+
         plt.title("Сравнение методов резервирования")
-        plt.xlabel("Физическое")
-        plt.ylabel("Логическое")
+        plt.xlabel("Физическое резервирование")
+        plt.ylabel("Логическое резервирование")
         plt.grid(True)
+        plt.legend()
 
         self.canvas_compare = FigureCanvasTkAgg(fig, self.compare_frame)
         self.canvas_compare.draw()
@@ -293,8 +306,6 @@ class ReliabilityApp:
     def clear_all(self):
         if self.canvas_graph:
             self.canvas_graph.get_tk_widget().destroy()
-        if self.canvas_plot:
-            self.canvas_plot.get_tk_widget().destroy()
         if self.canvas_compare:
             self.canvas_compare.get_tk_widget().destroy()
         self.matrix_text.delete(1.0, tk.END)
