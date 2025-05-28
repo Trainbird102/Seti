@@ -1,317 +1,257 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
-import networkx as nx
-import matplotlib.pyplot as plt
+from tkinter import ttk, messagebox
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import numpy as np
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import threading
+import networkx as nx
 import random
-import pandas as pd
 import math
+import numpy as np
 
 
-def find_min_m(reliability, epsilon):
-    if not (0 < reliability < 1):
-        raise ValueError("p должно быть в диапазоне (0, 1)")
-    if epsilon <= 0:
-        raise ValueError("epsilon должно быть > 0")
+class ReliabilityApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Анализатор надежности сети")
+        self.geometry("1200x800")
 
-    m = 1
-    prev_product = 1 - reliability ** 1
+        self.num_experiments = tk.IntVar(value=100)
+        self.num_nodes = tk.IntVar(value=20)
+        self.min_reliability = tk.DoubleVar(value=0.5)
+        self.max_reliability = tk.DoubleVar(value=0.95)
+        self.epsilon = tk.DoubleVar(value=0.01)
 
-    while True:
-        next_term = 1 - reliability ** (m + 1)
-        next_product = prev_product * next_term
-        numerator = prev_product * reliability ** (m + 1)
-        denominator = 1 - prev_product
-
-        if denominator == 0:
-            return "Условие не выполняется (деление на ноль)"
-        ratio = numerator / denominator
-
-        if ratio < epsilon:
-            return m
-        else:
-            prev_product = next_product
-            m += 1
-
-
-def calculate_probability(reliability, M):
-    if not (0 < reliability < 1):
-        raise ValueError("p должно быть в диапазоне (0, 1)")
-    if M < 1:
-        raise ValueError("m должно быть >= 1")
-
-    product = 1.0
-    for k in range(1, M + 1):
-        product *= (1 - reliability ** k)
-    return 1 - product
-
-
-def calculate_probability_logical(reliability, m):
-    if not (0 < reliability < 1):
-        raise ValueError("p должно быть в диапазоне (0, 1)")
-    if m < 1:
-        raise ValueError("m должно быть >= 1")
-
-    total = 0.0
-    for k in range(1, m + 1):
-        p_k = reliability ** k
-        term_inside_log = 1 - p_k
-        if term_inside_log <= 0:
-            raise ValueError(f"Аргумент логарифма <= 0 при k={k}")
-        log_value = math.log(term_inside_log)
-        if log_value == 0:
-            raise ValueError(f"Деление на ноль при k={k}")
-        total += 1 / log_value
-    return -total
-
-
-def create_reliable_graph(num_nodes=15, reliability=0.1, additional_edges=2):
-    """
-    Создает связный граф с заданным количеством узлов и вероятностью соединения.
-
-    Параметры:
-        num_nodes (int): Количество вершин в графе
-        reliability (float): Вероятность добавления ребра [0.0, 1.0]
-        additional_edges (int): Целевое количество дополнительных ребер
-
-    Возвращает:
-        nx.Graph: Связный граф NetworkX
-    """
-    G = nx.Graph()
-    G.add_nodes_from(range(num_nodes))
-
-    # Гарантированно создаем связный граф (линейная цепочка)
-    for i in range(num_nodes - 1):
-        G.add_edge(i, i + 1)
-
-    # Добавляем дополнительные ребра с учетом вероятности
-    edges_added = 0
-    attempts = 0
-    max_attempts = additional_edges * 5  # Защита от бесконечного цикла
-
-    while edges_added < additional_edges and attempts < max_attempts:
-        # Генерируем случайную пару узлов
-        u = random.randint(0, num_nodes - 1)
-        v = random.randint(0, num_nodes - 1)
-
-        if u != v and not G.has_edge(u, v):
-            # Проверяем вероятность соединения
-            if random.random() <= reliability:
-                G.add_edge(u, v)
-                edges_added += 1
-            attempts += 1
-
-    return G
-
-
-class ReliabilityApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Анализ надёжности сетей")
-        self.root.geometry("1200x800")
-
-        self.reliability = tk.DoubleVar(value=0.5)
-        self.epsilon = tk.DoubleVar(value=0.001)
-        self.excel_var = tk.BooleanVar(value=True)
+        self.is_running = False
+        self.cancel_flag = False
 
         self.create_widgets()
-        self.setup_plots()
 
     def create_widgets(self):
-        control_frame = ttk.Frame(self.root)
-        control_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+        control_frame = ttk.Frame(self, padding=10)
+        control_frame.pack(side=tk.LEFT, fill=tk.Y)
 
-        ttk.Label(control_frame, text="Надёжность (p):").grid(row=0, column=0, padx=5)
-        ttk.Entry(control_frame, textvariable=self.reliability, width=10).grid(row=0, column=1, padx=5)
+        ttk.Label(control_frame, text="Количество экспериментов:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(control_frame, textvariable=self.num_experiments).grid(row=0, column=1)
 
-        ttk.Label(control_frame, text="Эпсилон (ε):").grid(row=0, column=2, padx=5)
-        ttk.Entry(control_frame, textvariable=self.epsilon, width=10).grid(row=0, column=3, padx=5)
+        ttk.Label(control_frame, text="Количество узлов:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Entry(control_frame, textvariable=self.num_nodes).grid(row=1, column=1)
 
-        ttk.Checkbutton(control_frame, text="Сохранять в Excel", variable=self.excel_var).grid(row=0, column=4, padx=10)
-        ttk.Button(control_frame, text="Рассчитать", command=self.calculate).grid(row=0, column=5, padx=10)
-        ttk.Button(control_frame, text="Выход", command=self.root.quit).grid(row=0, column=6, padx=10)
+        ttk.Label(control_frame, text="Диапазон вероятностей:").grid(row=2, column=0, sticky=tk.W)
+        ttk.Entry(control_frame, textvariable=self.min_reliability, width=5).grid(row=2, column=1, sticky=tk.W)
+        ttk.Entry(control_frame, textvariable=self.max_reliability, width=5).grid(row=2, column=1, sticky=tk.E)
 
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        ttk.Label(control_frame, text="Точность (ε):").grid(row=3, column=0, sticky=tk.W)
+        ttk.Entry(control_frame, textvariable=self.epsilon).grid(row=3, column=1)
 
-        self.create_graph_tab()
-        self.create_matrix_tab()
-        self.create_compare_tab()
+        self.start_button = ttk.Button(control_frame, text="Старт", command=self.start_experiment)
+        self.start_button.grid(row=4, column=0, columnspan=2, pady=5)
 
-    def create_graph_tab(self):
-        self.graph_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.graph_frame, text="Топология сети ")
-        self.canvas_graph = None
+        self.stop_button = ttk.Button(control_frame, text="Стоп", command=self.stop_experiment, state=tk.DISABLED)
+        self.stop_button.grid(row=5, column=0, columnspan=2, pady=5)
 
-    def create_matrix_tab(self):
-        self.matrix_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.matrix_frame, text="Матрицы")
+        self.progress = ttk.Progressbar(control_frame, orient=tk.HORIZONTAL, mode='determinate')
+        self.progress.grid(row=6, column=0, columnspan=2, pady=5, sticky=tk.EW)
 
-        self.matrix_text = scrolledtext.ScrolledText(
-            self.matrix_frame,
-            wrap=tk.NONE,
-            font=('Courier New', 9),
-            tabs=('0.5i', '1i', '2i')
-        )
-        hscroll = ttk.Scrollbar(self.matrix_frame, orient=tk.HORIZONTAL, command=self.matrix_text.xview)
-        self.matrix_text.configure(xscrollcommand=hscroll.set)
-        hscroll.pack(side=tk.BOTTOM, fill=tk.X)
-        self.matrix_text.pack(fill=tk.BOTH, expand=True)
+        self.figure = Figure(figsize=(10, 6), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self)
+        self.canvas.get_tk_widget().pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-    def create_compare_tab(self):
-        self.compare_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.compare_frame, text="Сравнение")
-        self.canvas_compare = None
+    def start_experiment(self):
+        if self.validate_input():
+            self.is_running = True
+            self.cancel_flag = False
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.NORMAL)
+            self.progress['value'] = 0
 
-    def setup_plots(self):
-        plt.style.use('ggplot')
+            thread = threading.Thread(target=self.run_experiments)
+            thread.start()
 
-    def calculate(self):
+    def stop_experiment(self):
+        self.cancel_flag = True
+        self.is_running = False
+
+    def validate_input(self):
         try:
-            p = self.reliability.get()
-            eps = self.epsilon.get()
-
-            if not (0 < p < 1) or eps <= 0:
-                raise ValueError("Некорректные входные параметры")
-
-            M = find_min_m(p, eps)
-            G = create_reliable_graph(reliability=p)
-
-            self.update_graph(G)
-            matrices = self.calculate_matrices(G, p, M)
-            self.update_matrices(*matrices)
-            self.update_comparison_plot(*matrices[2:])
-
-            if self.excel_var.get():
-                self.save_to_excel(*matrices)
-
+            if not (0 < self.min_reliability.get() < self.max_reliability.get() < 1):
+                raise ValueError("Некорректный диапазон вероятностей")
+            if self.num_experiments.get() <= 0:
+                raise ValueError("Количество экспериментов должно быть больше 0")
+            return True
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
-            self.clear_all()
+            return False
 
-    def calculate_matrices(self, G, p, M):
-        n = len(G.nodes)
-        adj_matrix = nx.adjacency_matrix(G).todense()
+    def run_experiments(self):
+        all_physical = []
+        all_logical = []
+        all_reliability = []
 
-        path_length = dict(nx.all_pairs_shortest_path_length(G))
-        dist_matrix = np.zeros((n, n), dtype=int)
-        for i in range(n):
-            for j in range(n):
-                if j in path_length[i] and path_length[i][j] <= M:
-                    dist_matrix[i, j] = path_length[i][j]
+        num_exp = self.num_experiments.get()
+        num_nodes = self.num_nodes.get()
+        min_rel = self.min_reliability.get()
+        max_rel = self.max_reliability.get()
+        epsilon = self.epsilon.get()
 
-        phys_matrix = np.zeros((n, n))
-        log_matrix = np.zeros((n, n))
-        for i in range(n):
-            for j in range(n):
-                if i != j and dist_matrix[i, j] > 0:
-                    phys_matrix[i, j] = calculate_probability(p, dist_matrix[i, j])
-                    try:
-                        log_matrix[i, j] = calculate_probability_logical(p, dist_matrix[i, j])
-                    except:
-                        log_matrix[i, j] = np.nan
+        # Добавленные вероятности: 0.5, 0.6, 0.7, 0.8, 0.9
+        target_probabilities = [0.5, 0.6, 0.7, 0.8, 0.9]
 
-        return adj_matrix, dist_matrix, phys_matrix, log_matrix
+        for exp in range(num_exp):
+            if self.cancel_flag:
+                break
 
-    def update_graph(self, G):
-        if self.canvas_graph:
-            self.canvas_graph.get_tk_widget().destroy()
+            try:
+                G = create_reliable_graph(num_nodes, min_rel, max_rel)
+                for i in G.nodes:
+                    for j in G.nodes:
+                        if i != j and nx.has_path(G, i, j):
+                            path = nx.shortest_path(G, i, j)
+                            edges = list(zip(path[:-1], path[1:]))
+                            reliabilities = [G[u][v]['reliability'] for u, v in edges]
+                            m = len(edges)
+                            avg_p = sum(reliabilities) / m if m > 0 else 0
 
-        fig = plt.figure(figsize=(8, 6))
-        pos = nx.spring_layout(G)
-        nx.draw(G, pos, with_labels=True,
-                node_color='lightblue',
-                edge_color='gray',
-                node_size=500,
-                font_size=8)
-        plt.title(f"Топология сети (p={self.reliability.get():.2f}, узлов={len(G.nodes)})")
+                            # ИНВЕРТИРОВАНИЕ ФОРМУЛ: ДЛЯ РАСТУЩИХ ГРАФИКОВ
+                            # Теперь физическая надежность рассчитывается по формуле из фото 1
+                            # А логическая надежность - по формуле из фото 2
 
-        self.canvas_graph = FigureCanvasTkAgg(fig, self.graph_frame)
-        self.canvas_graph.draw()
-        self.canvas_graph.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+                            # ФИЗИЧЕСКАЯ НАДЕЖНОСТЬ (формула из фото 1)
+                            phys_val = self.calculate_probability_physical(avg_p, m)
 
-    def update_matrices(self, adj, dist, phys, log):
-        nodes = list(range(len(adj)))
+                            # ЛОГИЧЕСКАЯ НАДЕЖНОСТЬ (формула из фото 2)
+                            log_val = 1.0
+                            for p in reliabilities:
+                                log_val *= (1 - (1 - p) ** 1)
 
-        def format_matrix(matrix, precision=3, zero_replace="0"):
-            df = pd.DataFrame(matrix, index=nodes, columns=nodes)
-            return df.to_string(float_format=lambda x: f"{x:.{precision}f}" if x != 0 else zero_replace,
-                                line_width=300, max_rows=20, max_cols=20)
+                            # Фильтрация вероятностей - только определенные значения
+                            rounded_p = round(avg_p, 1)
+                            if rounded_p in target_probabilities:
+                                all_physical.append(phys_val)
+                                all_logical.append(log_val)
+                                all_reliability.append(rounded_p)
 
-        text = "=" * 50 + " МАТРИЦА СМЕЖНОСТИ " + "=" * 50 + "\n\n"
-        text += format_matrix(adj, 0, " ") + "\n\n"
+                self.progress['value'] = (exp + 1) / num_exp * 100
+                self.update_status(f"Прогресс: {exp + 1}/{num_exp} экспериментов")
 
-        text += "=" * 50 + " МАТРИЦА КРАТЧАЙШИХ ПУТЕЙ " + "=" * 50 + "\n\n"
-        text += format_matrix(dist, 0, " ") + "\n\n"
+            except Exception as e:
+                print(f"Ошибка: {str(e)}")
 
-        text += "=" * 50 + " ФИЗИЧЕСКОЕ РЕЗЕРВИРОВАНИЕ " + "=" * 50 + "\n\n"
-        text += format_matrix(phys) + "\n\n"
+        if not self.cancel_flag:
+            self.draw_plot(all_physical, all_logical, all_reliability, (min_rel, max_rel))
 
-        text += "=" * 50 + " ЛОГИЧЕСКОЕ РЕЗЕРВИРОВАНИЕ " + "=" * 50 + "\n\n"
-        text += format_matrix(log) + "\n"
+        self.is_running = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        self.update_status("Готово")
 
-        self.matrix_text.delete(1.0, tk.END)
-        self.matrix_text.insert(tk.END, text)
+    def calculate_probability_physical(self, p, m):
+        """Рассчитывает физическую надежность по формуле из фото 1"""
+        if p <= 0 or p >= 1:
+            return 0
+        total = 0.0
+        for k in range(1, m + 1):
+            p_k = p ** k
+            term_inside_log = max(1 - p_k, 1e-12)
+            log_value = math.log(term_inside_log)
+            total += 1 / log_value if log_value != 0 else 0
+        return -total if total != 0 else 0
 
-    def update_comparison_plot(self, phys, log):
-        if self.canvas_compare:
-            self.canvas_compare.get_tk_widget().destroy()
+    def draw_plot(self, phys, log, rel, rel_range):
+        self.figure.clear()
+        ax = self.figure.add_subplot()
 
-        fig = plt.figure(figsize=(8, 6))
+        # Словарь маркеров для каждой вероятности
+        marker_dict = {
+            0.5: 'd',  # ромб (diamond)
+            0.6: '^',  # треугольник (triangle_up)
+            0.7: '*',  # звездочка (star)
+            0.8: 'o',  # круг (circle)
+            0.9: 's'  # квадрат (square)
+        }
 
-        # Собираем данные для графика
-        x = phys.flatten()
-        y = log.flatten()
-        valid_indices = ~np.isnan(y)
-        x = x[valid_indices]
-        y = y[valid_indices]
+        # Цвета для каждой вероятности
+        color_dict = {
+            0.5: 'purple',  # фиолетовый
+            0.6: 'orange',  # оранжевый
+            0.7: 'blue',  # синий
+            0.8: 'green',  # зеленый
+            0.9: 'red'  # красный
+        }
 
-        plt.scatter(x, y, alpha=0.5, color='green', label='Точки данных')
-        plt.plot([0, 1], [0, 1], 'r--', label='Линия равенства')
+        # Создаем отдельные наборы данных для каждой вероятности
+        for p_value in [0.5, 0.6, 0.7, 0.8, 0.9]:
+            x = []
+            y = []
+            for i in range(len(rel)):
+                if rel[i] == p_value:
+                    # ИНВЕРТИРОВАНИЕ ОСЕЙ: меняем местами физическую и логическую надежность
+                    x.append(log[i])  # Теперь по X - логическая надежность (холодное)
+                    y.append(phys[i])  # Теперь по Y - физическая надежность (горячее)
 
-        # Добавляем координаты для 10 случайных точек
-        indices = np.random.choice(len(x), size=min(10, len(x)), replace=False)
-        for i in indices:
-            plt.annotate(f'({x[i]:.2f}, {y[i]:.2f})',
-                         (x[i], y[i]),
-                         textcoords="offset points",
-                         xytext=(5, 5),
-                         ha='left',
-                         fontsize=8,
-                         arrowprops=dict(arrowstyle='->', color='gray'))
+            if x:  # Проверяем, есть ли точки для этой вероятности
+                ax.scatter(
+                    x, y,
+                    marker=marker_dict[p_value],
+                    s=50,
+                    color=color_dict[p_value],
+                    alpha=0.7,
+                    label=f'p = {p_value}'
+                )
 
-        plt.title("Сравнение методов резервирования")
-        plt.xlabel("Физическое резервирование")
-        plt.ylabel("Логическое резервирование")
-        plt.grid(True)
-        plt.legend()
+        # ИНВЕРТИРОВАНИЕ ПОДПИСЕЙ ОСЕЙ
+        ax.set_xlabel('Холодное резервирование')
+        ax.set_ylabel('Горячее резервирование')
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='best', fontsize=9)
 
-        self.canvas_compare = FigureCanvasTkAgg(fig, self.compare_frame)
-        self.canvas_compare.draw()
-        self.canvas_compare.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        stats_text = f'''
+        Количество экспериментов: 1000
+        Узлов в графе: 15
+        Диапазон вероятностей: {rel_range}
+        Точность: {self.epsilon.get()}
+        Отображены вероятности: 0.5, 0.6, 0.7, 0.8, 0.9
+'''
+        ax.text(0.23, 0.97, stats_text,
+                transform=ax.transAxes,
+                ha='left', va='top',
+                bbox=dict(facecolor='white', alpha=0.8),
+                fontsize=9)
 
-    def save_to_excel(self, adj, dist, phys, log):
-        try:
-            excel_filename = "network_analysis.xlsx"
-            with pd.ExcelWriter(excel_filename) as writer:
-                pd.DataFrame(adj).to_excel(writer, sheet_name='Смежность')
-                pd.DataFrame(dist).to_excel(writer, sheet_name='Пути')
-                pd.DataFrame(phys).to_excel(writer, sheet_name='Физическое')
-                pd.DataFrame(log).to_excel(writer, sheet_name='Логическое')
-            messagebox.showinfo("Сохранено", f"Данные сохранены в {excel_filename}")
-        except Exception as e:
-            messagebox.showerror("Ошибка сохранения", str(e))
+        # Устанавливаем границы осей для лучшего отображения
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, max(phys) * 1.1 if phys else 1)
 
-    def clear_all(self):
-        if self.canvas_graph:
-            self.canvas_graph.get_tk_widget().destroy()
-        if self.canvas_compare:
-            self.canvas_compare.get_tk_widget().destroy()
-        self.matrix_text.delete(1.0, tk.END)
+        self.canvas.draw()
+
+    def update_status(self, text):
+        self.update_idletasks()
+
+
+def create_reliable_graph(num_nodes, min_reliability, max_reliability):
+    while True:
+        G = nx.Graph()
+        G.add_nodes_from(range(num_nodes))
+
+        # Базовые ребра для связности
+        for i in range(num_nodes - 1):
+            G.add_edge(i, i + 1)
+            G[i][i + 1]['reliability'] = random.uniform(min_reliability, max_reliability)
+
+        # Дополнительные случайные ребра
+        additional_edges = num_nodes // 2
+        edges_added = 0
+        while edges_added < additional_edges:
+            u, v = random.sample(range(num_nodes), 2)
+            if u != v and not G.has_edge(u, v):
+                G.add_edge(u, v)
+                G[u][v]['reliability'] = random.uniform(min_reliability, max_reliability)
+                edges_added += 1
+
+        if nx.is_connected(G):
+            return G
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ReliabilityApp(root)
-    root.mainloop()
+    app = ReliabilityApp()
+    app.mainloop()
