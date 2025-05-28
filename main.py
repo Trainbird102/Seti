@@ -141,7 +141,7 @@ class ReliabilityApp:
 
     def create_graph_tab(self):
         self.graph_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.graph_frame, text="Топология сети")
+        self.notebook.add(self.graph_frame, text="Топология сети ")
         self.canvas_graph = None
 
     def create_matrix_tab(self):
